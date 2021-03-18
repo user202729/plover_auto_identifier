@@ -1,6 +1,7 @@
 # TODO there's no way to break words (S-P or TK-LS or KPA doesn't have any effect)
 # TODO I typed a raw stroke that contain -S, and now all "s" are capitalized to "S"?...
 # TODO better way to keep track of issues
+# TODO handle prefix/suffix strokes better?...
 from typing import Dict, Tuple, TYPE_CHECKING, NamedTuple, List, MutableMapping
 from collections import defaultdict
 import subprocess
@@ -39,6 +40,10 @@ class Token:
 def to_simple(word: str)->str:
 	return re.sub(r"\W|_", "", word).lower()
 
+def lower_first_character(string: str)->str:
+	if not string: return string
+	return string[0].lower()+string[1:]
+
 class Main:
 	def __init__(self, engine: "plover.engine.StenoEngine")->None:
 		self._engine=engine
@@ -67,7 +72,7 @@ class Main:
 	def _save_wordlist(self)->None:
 		json.dump(
 				(self._simple_to_word, self._simple_length_bound),
-				stored_wordlist.open("w"))
+				stored_wordlist.open("w"), indent="\t")
 
 
 	def on_send_string(self, s: str)->None:
@@ -86,7 +91,12 @@ class Main:
 					if buf and buf[-1].is_word:
 						new_word=buf[-1].content
 						new_word_simple=to_simple(new_word)
-						if new_word!=new_word_simple and new_word not in self._simple_to_word.get(new_word_simple, ()):
+						if (
+								lower_first_character(new_word)!=new_word_simple # avoid lowercase being automatically converted to uppercase
+								# there are cases of normal and uppercased abbreviation TODO
+								and
+								new_word not in self._simple_to_word.get(new_word_simple, ())
+								):
 							# (in) takes O(n), but there should not be a lot of conflicts
 							# see also todo above
 							buf[-1].defining=True
@@ -147,17 +157,23 @@ class Main:
 							assert translator.get_state().translations
 							last_translation=translator.get_state().translations[-1]
 							L(last_translation, last_translation.__dict__)
-							translator.untranslate_translation(last_translation)
+
+							translator._undo(last_translation)
+
+							new_translation=Translation(
+									outline=[Stroke([])],
+									translation=
+									last_translation.english+
+									"{:plover_auto_identifier_delete_char:" + delete_content + "}"+
+									replace
+									)
+							new_translation.replaced=last_translation.replaced
 
 							#undo(translator, Stroke([]), '')
-							translator.translate_translation(
-									Translation(
-										outline=[Stroke([])],
-										translation=
-										last_translation.english+
-										"{:plover_auto_identifier_delete_char:" + delete_content + "}"+
-										replace
-										))
+							translator._do(new_translation)
+							# !! do not use untranslate_translation and translate_translation
+							# (they handle replaced, which is undesired)
+							# although perhaps that's fine too?
 							
 							translator.flush()
 
