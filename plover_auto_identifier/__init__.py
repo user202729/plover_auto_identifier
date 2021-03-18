@@ -1,3 +1,6 @@
+# TODO there's no way to break words (S-P or TK-LS or KPA doesn't have any effect)
+# TODO I typed a raw stroke that contain -S, and now all "s" are capitalized to "S"?...
+# TODO better way to keep track of issues
 from typing import Dict, Tuple, TYPE_CHECKING, NamedTuple, List, MutableMapping
 from collections import defaultdict
 import subprocess
@@ -11,11 +14,18 @@ import argparse
 import shlex
 from plover.oslayer.config import CONFIG_DIR
 from .delete_char import delete_char
+import functools
 
 if TYPE_CHECKING:
 	import plover.engine
 
 stored_wordlist=Path(CONFIG_DIR)/"wordlist.json"
+try:
+	logfile=Path("/tmp/L").open("w", buffering=1)
+	L=functools.partial(print, file=logfile)
+	# could use log.debug too but there's no way to turn off Plover's debug
+except:
+	pass
 
 class Token:
 	def __init__(self, is_word: bool, content: str="")->None:
@@ -44,9 +54,13 @@ class Main:
 
 		self._temporarily_disabled: bool=False
 
+		if 1: #debug thing
+			self._simple_to_word["iscan"]=["isCan"]
+			self._simple_length_bound=5
+
 
 	def on_send_string(self, s: str)->None:
-		print("Get: send string", s)
+		L("Get: send string", s)
 		try:
 			parts=re.split(r"(\W+)", s)
 			assert len(parts)%2==1
@@ -67,67 +81,84 @@ class Main:
 							buf[-1].defining=True
 							self._simple_to_word[new_word_simple].append(new_word)
 							self._simple_length_bound=max(self._simple_length_bound, len(new_word_simple))
-							print(f"Add {new_word_simple} -> {new_word}")
+							L(f"Add {new_word_simple} -> {new_word}")
+
+							#L(self._simple_to_word, self._simple_length_bound)
 
 					buf.append(Token(is_word, part))
 
 			#try to merge just-typed words
 			component=""
 			delete_content=""
-			for i in range(len(buf)-1, -1, -1):
-				part=buf[i].content
-				assert part
-				delete_content=part+delete_content
-				if not buf[i].is_word and not part.isspace(): break
-				if buf[i].defining: break
-				if not buf[i].is_word: continue
-				component=to_simple(part)+component
-				if len(component)>self._simple_length_bound: break
+			if buf and buf[-1].is_word:
+				for i in range(len(buf)-1, -1, -1):
+					part=buf[i].content
+					assert part
+					delete_content=part+delete_content
+					if not buf[i].is_word and not part.isspace(): break
+					if buf[i].defining: break
+					if not buf[i].is_word: continue
+					component=to_simple(part)+component
+					if len(component)>self._simple_length_bound: break
 
-				print(f"* {component=} {delete_content=}")
+					L(f"* {component=} {delete_content=}")
 
-				if component in self._simple_to_word:
-					assert self._simple_to_word[component]
-					replace=self._simple_to_word[component][-1]
-					if delete_content==replace:
+					if component in self._simple_to_word:
+						assert self._simple_to_word[component]
+						replace=self._simple_to_word[component][-1]
+						if delete_content==replace:
+							break
+
+						# TODO current bug: if user types ". And", all subsequent "and" will be changed to "And"
+						# Idea: detect zero-effect strokes/translations/actions (but not sent-string)
+
+						# TODO for after-output space placement users perhaps it should not be defined that quickly?
+
+						# TODO? there's no easy way to determine which stroke/translation/action
+						# corresponds to which output string...
+
+						#engine._translator
+						assert all(x not in replace for x in "{}\\")
+
+						from plover.translation import Translation
+						L(f"Do replace {delete_content} -> {replace}")
+						if self._temporarily_disabled:
+							L("Huh?")
+						else:
+							from plover.steno import Stroke
+							self._temporarily_disabled=True
+							#assert self._engine.translator_state.translations
+							#self._engine.translator_state.translations.pop()
+
+							translator=self._engine._translator
+
+							assert translator.get_state().translations
+							last_translation=translator.get_state().translations[-1]
+							L(last_translation, last_translation.__dict__)
+							translator.untranslate_translation(last_translation)
+
+							#undo(translator, Stroke([]), '')
+							translator.translate_translation(
+									Translation(
+										outline=[Stroke([])],
+										translation=
+										last_translation.english+
+										"{:plover_auto_identifier_delete_char:" + delete_content + "}"+
+										replace
+										))
+							
+							translator.flush()
+
+							self._temporarily_disabled=False
+
 						break
-
-					# TODO current bug: if user types ". And", all subsequent "and" will be changed to "And"
-					# Idea: detect zero-effect strokes/translations/actions (but not sent-string)
-
-					# TODO for after-output space placement users perhaps it should not be defined that quickly?
-
-					# TODO? there's no easy way to determine which stroke/translation/action
-					# corresponds to which output string...
-
-					#engine._translator
-					assert all(x not in replace for x in "{}\\")
-
-					from plover.translation import Translation
-					print(f"Do replace {delete_content} -> {replace}")
-					if self._temporarily_disabled:
-						print("Huh?")
-					else:
-						from plover.steno import Stroke
-						self._temporarily_disabled=True
-						#assert self._engine.translator_state.translations
-						#self._engine.translator_state.translations.pop()
-						undo(self._engine._translator, Stroke([]), '')
-						self._engine._translator.translate_translation(Translation(
-							outline=[Stroke([])],
-							translation="{:plover_auto_identifier_delete_char:" + delete_content + "}"
-							+ replace
-							))
-						self._engine._translator.flush()
-						self._temporarily_disabled=False
-
-					break
 		except:
+			# TODO why Plover can't print traceback already?
 			import traceback
-			traceback.print_exc()
+			L(traceback.format_exc())
 
 	def on_send_backspaces(self, b: int)->None:
-		print("Get bksp = ",b)
+		L("Get bksp = ",b)
 		assert b>0
 		buf=self._buffer
 		while buf and b:
@@ -153,7 +184,7 @@ class Main:
 
 	def on_send_key_combination(self, c: str)->None:
 		self._buffer=[]
-		print("Clear state")
+		L("Clear state")
 		# make keys permanent, possibly except last one typed (TODO?)
 
 	def start(self)->None:
