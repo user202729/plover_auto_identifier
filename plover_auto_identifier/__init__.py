@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 	import plover.engine
 
 #stored_wordlist=Path(CONFIG_DIR)/"wordlist.json"
-stored_wordlist=Path("/tmp/wordlist.json")
+stored_wordlist=Path("/tmp/wordlist.v2.json")
 try:
 	logfile=Path("/tmp/L").open("w", buffering=1)
 	L=functools.partial(print, file=logfile)
@@ -66,13 +66,16 @@ class Main:
 		self._temporarily_disabled: bool=False
 
 	def _load_wordlist(self)->None:
-		self._simple_to_word, self._simple_length_bound=json.load(stored_wordlist.open("r"))
-		self._simple_to_word=defaultdict(list, self._simple_to_word)
+		data=json.load(stored_wordlist.open("r"))
+		self._simple_to_word=defaultdict(list, data["simple_to_word"])
+		self._simple_length_bound=data["simple_length_bound"]
 
 	def _save_wordlist(self)->None:
-		json.dump(
-				(self._simple_to_word, self._simple_length_bound),
-				stored_wordlist.open("w"), indent="\t")
+		json.dump({
+			"simple_to_word": self._simple_to_word,
+			"simple_length_bound": self._simple_length_bound
+			},
+			stored_wordlist.open("w"), indent="\t")
 
 
 	def on_send_string(self, s: str)->None:
