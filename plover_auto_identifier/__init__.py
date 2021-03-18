@@ -19,7 +19,8 @@ import functools
 if TYPE_CHECKING:
 	import plover.engine
 
-stored_wordlist=Path(CONFIG_DIR)/"wordlist.json"
+#stored_wordlist=Path(CONFIG_DIR)/"wordlist.json"
+stored_wordlist=Path("/tmp/wordlist.json")
 try:
 	logfile=Path("/tmp/L").open("w", buffering=1)
 	L=functools.partial(print, file=logfile)
@@ -44,19 +45,29 @@ class Main:
 		#for simplicity, it will always run now
 
 		self._buffer: List[Token]=[]
-		self._simple_length_bound=0
 
-		self._simple_to_word: MutableMapping[str, List[str]]=defaultdict(list)
-		# TODO if there are multiple words with the same simple form, they will be in an arbitrary order
+		try:
+			self._load_wordlist()
+		except:
+			self._simple_to_word, self._simple_length_bound=defaultdict(list), 0
+			self._save_wordlist()
+
+		self._simple_to_word: MutableMapping[str, List[str]]
+		# TODO if there are multiple words with the same simple form, only the most recently typed can be entered
 		engine.hook_connect("send_string", self.on_send_string)
 		engine.hook_connect("send_backspaces", self.on_send_backspaces)
 		engine.hook_connect("send_key_combination", self.on_send_key_combination)
 
 		self._temporarily_disabled: bool=False
 
-		if 1: #debug thing
-			self._simple_to_word["iscan"]=["isCan"]
-			self._simple_length_bound=5
+	def _load_wordlist(self)->None:
+		self._simple_to_word, self._simple_length_bound=json.load(stored_wordlist.open("r"))
+		self._simple_to_word=defaultdict(list, self._simple_to_word)
+
+	def _save_wordlist(self)->None:
+		json.dump(
+				(self._simple_to_word, self._simple_length_bound),
+				stored_wordlist.open("w"))
 
 
 	def on_send_string(self, s: str)->None:
@@ -82,6 +93,7 @@ class Main:
 							self._simple_to_word[new_word_simple].append(new_word)
 							self._simple_length_bound=max(self._simple_length_bound, len(new_word_simple))
 							L(f"Add {new_word_simple} -> {new_word}")
+							self._save_wordlist()
 
 							#L(self._simple_to_word, self._simple_length_bound)
 
@@ -176,6 +188,7 @@ class Main:
 					self._simple_to_word[word_simple].remove(word)
 					if not self._simple_to_word[word_simple]:
 						del self._simple_to_word[word_simple]
+					self._save_wordlist()
 					buf[-1].defining=False
 			else:
 				assert b>0
