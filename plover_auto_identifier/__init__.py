@@ -50,6 +50,7 @@ class Main:
 		#for simplicity, it will always run now
 
 		self._buffer: List[Token]=[]
+		self._simple_to_word: MutableMapping[str, List[str]]
 
 		try:
 			self._load_wordlist()
@@ -57,7 +58,6 @@ class Main:
 			self._simple_to_word, self._simple_length_bound=defaultdict(list), 0
 			self._save_wordlist()
 
-		self._simple_to_word: MutableMapping[str, List[str]]
 		# TODO if there are multiple words with the same simple form, only the most recently typed can be entered
 		engine.hook_connect("send_string", self.on_send_string)
 		engine.hook_connect("send_backspaces", self.on_send_backspaces)
