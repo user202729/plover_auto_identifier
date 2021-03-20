@@ -65,6 +65,8 @@ class Main:
 
 		self._temporarily_disabled: bool=False
 
+		self._running: bool=False
+
 	def _load_wordlist(self)->None:
 		data=json.load(stored_wordlist.open("r"))
 		self._simple_to_word=defaultdict(list, data["simple_to_word"])
@@ -79,6 +81,7 @@ class Main:
 
 
 	def on_send_string(self, s: str)->None:
+		if not self._running: return
 		L("Get: send string", s)
 		try:
 			parts=re.split(r"(\W+)", s)
@@ -189,6 +192,7 @@ class Main:
 			L(traceback.format_exc())
 
 	def on_send_backspaces(self, b: int)->None:
+		if not self._running: return
 		L("Get bksp = ",b)
 		assert b>0
 		buf=self._buffer
@@ -215,12 +219,13 @@ class Main:
 				break
 
 	def on_send_key_combination(self, c: str)->None:
+		if not self._running: return
 		self._buffer=[]
 		L("Clear state")
 		# make keys permanent, possibly except last one typed (TODO?)
 
 	def start(self)->None:
-		pass
+		self._running=True
 
 	def stop(self)->None:
-		pass
+		self._running=False
