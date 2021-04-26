@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, TYPE_CHECKING, NamedTuple, List, MutableMapping, Sequence, Optional
+from typing import Dict, Tuple, TYPE_CHECKING, NamedTuple, List, MutableMapping, Sequence, Optional, cast
 from collections import defaultdict
 import sys
 import re
@@ -86,6 +86,20 @@ def translations_to_text_or_empty(translations: List[Translation], initial_text:
 		traceback.print_exc()
 		return ""
 
+main_instance=cast("Main", None)
+
+def parse_identifier_mark(argument: str)->Optional[Tuple[str, int, str]]:
+	# argument should be the value parsed by Plover (without the escape of "\\{}")
+	match=re.fullmatch("(.*){PLOVER:AUTO_IDENTIFIER_IS_IDENTIFIER_MARK:(\d*?) (.*)}", argument)
+	if not match: return None
+	return match[1], int(match[2]), re.sub(r"\\([{}\\])", r"\1", match[3])
+
+def create_identifier_mark(word: str, number_last_replace: int, last_content: str)->str:
+	last_content_escaped=last_content.translate({ord(ch): "\\"+ch for ch in "\\{}"})
+	result=word+"{PLOVER:AUTO_IDENTIFIER_IS_IDENTIFIER_MARK:"+str(number_last_replace)+' '+last_content_escaped+"}"
+	assert parse_identifier_mark(result)==(word, number_last_replace, last_content)
+	return result
+
 class Main:
 	def __init__(self, engine: "plover.engine.StenoEngine")->None:
 		self._engine=engine
@@ -98,6 +112,10 @@ class Main:
 		except:
 			self._simple_to_word={}
 			self._save_wordlist()
+
+		global main_instance
+		assert main_instance is None
+		main_instance=self
 
 		# TODO if there are multiple words with the same simple form, only the most recently typed can be entered
 		#engine.hook_connect("send_string", self.on_send_string)
@@ -135,15 +153,20 @@ class Main:
 		# only consider 10 last translations
 		part=translations[max(len(translations)-10, 0):]
 
-		# ignore any translation that produces a combo or a command
+		# ignore any translation that produces a combo or a command, or a raw stroke (likely a misstroke)
+		# NOTE therefore, currently it's not possible to nest multiple identifiers
 		for i in range(len(part)-1, -1, -1):
 			t=part[i]
 			if (
-					any(f.combo or f.command for f in t.formatting) or
-					(t.english and "{#}" in t.english) # this is not counted as a combo
+					any(f.combo or f.command for f in t.formatting)
+					or not t.english
 					):
 				part=part[i+1:]
 				break
+			else:
+				assert t.english
+				assert parse_identifier_mark(t.english) is None
+				# (because currently the identifier mark is implemented as a command)
 
 		if not part: return
 
@@ -181,18 +204,45 @@ class Main:
 				for i in range(1, len(part)): #not empty, not full
 					cur=translations_to_text_or_empty(part[:i]).rstrip()
 					#print(f"{i=} {cur=!r}")
-					if cur==target1:
-						a=i #choose the last one
+					if cur==target1 and a is None:
+						a=i #choose the first one (handle the case where there's a upper-next at the beginning)
 					elif cur==target2:
-						b=i #choose the first one
+						b=i #choose the first one (why?)
 						break
+
+					# ======some test cases======
+
+					# a b ^ c d
+					# =>
+					# a     (**=a)
+					# a b
+					# a b
+					# a bC  (**=b)
+					# a bC d
+
+					# okay, uniquely determined
+
+					# a <space> ^ b ^ c d
+					# a
+					# a<space>   (** should be =a)
+					# a<space>
+					# a B
+					# a B
+					# a BC       (=b, okay, uniquely determined)
+					# a BC d
+
+
+					# Iterate over all possible combinations? Weird.
+					# * Do not add single-word (in addition to single-translation) entries into
+					# the wordlist? (what's the point?)
+					
 
 				if a is not None and b is not None:
 					part1=part[a:b]
-					tmp=translations_to_text_or_empty(part1)
-					#print("**", part1, tmp, candidate)
-					if (tmp==candidate and
+					if (translations_to_text_or_empty(part1).strip()==candidate.strip() and
 							# condition: the user has spent additional effort to form the word
+							# note: this turns out to be a hard condition to check
+							# and currently might not be very correct
 							any(effective_no_op(translations_to_text_or_empty([t])) for t in part1)
 							):
 						L(f"Add {candidate!r}")
@@ -258,7 +308,11 @@ class Main:
 
 				new_translation=Translation(
 						outline=[Stroke([])],
-						translation=replaced_word+"{#}"
+						translation=create_identifier_mark(
+							replaced_word,
+							len(part1[-1].replaced),
+							part1[-1].english
+						)
 						)
 				new_translation.replaced=part1[:-1]+part1[-1].replaced
 
@@ -269,22 +323,6 @@ class Main:
 				break
 
 
-		#translations_to_output(part)
-		#
-		## NOTE not at all efficient
-		#for i in range(min(10, len(translations)), 1, -1):
-		#	current = translations[-i:]
-		#	# try merging parts from current...
-
-		#	 ctx = _Context(previous_translations, last_action)
-		#	 for t in do:
-		#		 if t.english:
-		#			 t.formatting = _translation_to_actions(t.english, ctx)
-		#		 else:
-		#			 t.formatting = _raw_to_actions(t.rtfcre[0], ctx)
-			
-
-
 	def start(self)->None:
 		self._running=True
 		self._engine.hook_connect("translated", self.on_translated)
@@ -292,3 +330,70 @@ class Main:
 	def stop(self)->None:
 		self._running=False
 		self._engine.hook_disconnect("translated", self.on_translated)
+
+	def is_identifier_mark(self, engine: "plover.engine.StenoEngine", argument: str)->None:
+		# this isn't actually processed, just so that latter functions can recognize
+		# the identifiers/combined words converted by this plugin.
+		pass
+
+	def remove_identifier(self, translator: Translator, stroke: Stroke, argument: str)->None:
+		"""Remove the most recently converted identifier."""
+		assert not argument
+		self._engine._queue.put((self.after_remove_identifier, [translator], {}))
+
+	def after_remove_identifier(self, translator: Translator)->None:
+		translations: List[Translation]=translator.get_state().translations
+		#for t in reversed(translations[-10:]):
+		for i in range(len(translations)-1, max(-1, len(translations)-11), -1):
+			t=translations[i]
+			if t.english:
+				match=parse_identifier_mark(t.english)
+				if match is not None:
+					word, number_last_replace, last_content=match
+
+					word_simple=to_simple(word)
+					if self._simple_to_word.get(word_simple, None)==word:
+						del self._simple_to_word[word_simple]
+
+					pending=[]
+					while t is not translations[-1]:
+						pending.append(translations[-1])
+						translator.untranslate_translation(translations[-1])
+						translations=translator.get_state().translations
+					assert number_last_replace<=len(t.replaced)
+					translator.untranslate_translation(t)
+					translations=translator.get_state().translations
+
+					new_translation=Translation(
+							[Stroke([])], #TODO this is incorrect
+							last_content)
+					new_translation.replaced=translations[len(translations)-number_last_replace:]
+					translator.translate_translation(new_translation)
+
+					for t in reversed(pending):
+						translator.translate_translation(t)
+
+					translator.flush()
+					return
+		raise Exception("No recently-translated identifier found!")
+
+	def mark_as_identifier(self, translator: Translator, stroke: Stroke, argument: str)->None:
+		translations: List[Translation]=translator.get_state().translations
+		match=re.search(r"(\w+)$", translations_to_text_or_empty(translations))
+		if not match:
+			raise Exception("Most recent word is not a word, or is too long")
+
+		word=match[0]
+		print(f"Add {word!r} to wordlist")
+		self._simple_to_word[to_simple(word)]=word
+		self._save_wordlist()
+		
+
+def is_identifier_mark(engine: "plover.engine.StenoEngine", argument: str)->None:
+	main_instance.is_identifier_mark(engine, argument)
+
+def remove_identifier(translator: Translator, stroke: Stroke, argument: str)->None:
+	main_instance.remove_identifier(translator, stroke, argument)
+
+def mark_as_identifier(translator: Translator, stroke: Stroke, argument: str)->None:
+	main_instance.mark_as_identifier(translator, stroke, argument)
