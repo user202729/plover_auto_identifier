@@ -33,7 +33,7 @@ being the file name to read the list of identifiers from that file (with `authke
 
 For example, you can place this code into `.vimrc` (UNIX system):
 
-```vimrc
+```vim
 function s:NotifyPloverAutoIdentifier()
 pythonx << EOF
 from multiprocessing import connection
