@@ -36,6 +36,7 @@ For example, you can place this code into `.vimrc` (UNIX system):
 ```vim
 function s:NotifyPloverAutoIdentifier()
 pythonx << EOF
+import vim
 from multiprocessing import connection
 filepath=vim.eval('expand("%:p")')
 if filepath: #if the user edit a new buffer, filepath might be empty
