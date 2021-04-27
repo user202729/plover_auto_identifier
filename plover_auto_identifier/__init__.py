@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import argparse
 import functools
+import tempfile
+import threading
 
 from plover.oslayer.config import CONFIG_DIR
 from plover import log
@@ -14,11 +16,13 @@ from plover.translation import Translation, Translator
 from plover.formatting import Formatter
 from plover.steno import Stroke
 
+from .controller import Controller
+
 if TYPE_CHECKING:
 	import plover.engine
 
 #stored_wordlist=Path(CONFIG_DIR)/"wordlist.json"
-stored_wordlist=Path("/tmp/wordlist.v3.json")
+stored_wordlist=Path(tempfile.gettempdir())/"wordlist.v3.json"
 
 L=print
 #try:
@@ -105,13 +109,13 @@ class Main:
 		self._engine=engine
 		#for simplicity, it will always run now
 
+		self._simple_to_word_modification_lock=threading.Lock()
 		self._simple_to_word: MutableMapping[str, str]
 
 		try:
 			self._load_wordlist()
 		except:
-			self._simple_to_word={}
-			self._save_wordlist()
+			self._clear_simple_to_word()
 
 		global main_instance
 		assert main_instance is None
@@ -125,12 +129,38 @@ class Main:
 		self._temporarily_disabled: bool=False
 
 		self._running: bool=False
+		self._controller: Optional[Controller]=None
+
+	def _clear_simple_to_word(self)->None:
+		with self._simple_to_word_modification_lock:
+			self._simple_to_word={}
+			self._save_wordlist()
+
+	def _message_cb(self, message):
+		L("Received message:", message)
+		message_type, message_content=message
+		assert message_type=="file"
+		try:
+			filename=Path(message_content)
+			with filename.open("r", encoding='u8') as f:
+				content=f.read()
+			with self._simple_to_word_modification_lock:
+				self._simple_to_word={
+						to_simple(word): word
+						for word in re.findall(r"\w+", content)
+						}
+				self._save_wordlist()
+		#except FileNotFoundError, PermissionError, IsADirectoryError:
+		except OSError:
+			pass
 
 	def _load_wordlist(self)->None:
 		data=json.load(stored_wordlist.open("r"))
-		self._simple_to_word=data["simple_to_word"]
+		with self._simple_to_word_modification_lock:
+			self._simple_to_word=data["simple_to_word"]
 
 	def _save_wordlist(self)->None:
+		assert self._simple_to_word_modification_lock.locked()
 		json.dump({
 			"simple_to_word": self._simple_to_word,
 			},
@@ -246,9 +276,9 @@ class Main:
 							any(effective_no_op(translations_to_text_or_empty([t])) for t in part1)
 							):
 						L(f"Add {candidate!r}")
-						self._simple_to_word[candidate_simple]=candidate
-
-						self._save_wordlist()
+						with self._simple_to_word_modification_lock:
+							self._simple_to_word[candidate_simple]=candidate
+							self._save_wordlist()
 						
 						
 
@@ -326,10 +356,17 @@ class Main:
 	def start(self)->None:
 		self._running=True
 		self._engine.hook_connect("translated", self.on_translated)
+		self._controller=Controller(instance="plover_auto_identifier", authkey=None)
+		self._controller.__enter__()
+		self._controller.start(self._message_cb)
 
 	def stop(self)->None:
 		self._running=False
 		self._engine.hook_disconnect("translated", self.on_translated)
+		assert self._controller
+		self._controller.stop()
+		self._controller.__exit__(None, None, None)
+		self._controller=None
 
 	def is_identifier_mark(self, engine: "plover.engine.StenoEngine", argument: str)->None:
 		# this isn't actually processed, just so that latter functions can recognize
@@ -385,8 +422,9 @@ class Main:
 
 		word=match[0]
 		print(f"Add {word!r} to wordlist")
-		self._simple_to_word[to_simple(word)]=word
-		self._save_wordlist()
+		with self._simple_to_word_modification_lock:
+			self._simple_to_word[to_simple(word)]=word
+			self._save_wordlist()
 		
 
 def is_identifier_mark(engine: "plover.engine.StenoEngine", argument: str)->None:
