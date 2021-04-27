@@ -202,12 +202,11 @@ class Main:
 
 
 		# add new words...?
-		output=translations_to_output(part)
+		full_output=translations_to_output(part)
 		# TODO remove words in output on undoing
-		# TODO editor integration
 
 
-		splitter_matches=[*re.finditer(r"(\W+)", output.text)]
+		splitter_matches=[*re.finditer(r"(\W+)", full_output.text)]
 		if len(splitter_matches)>=2: # there's a word before the candidate
 			#=> because moving left and right (right before the first operation) might corrupt the actual typed word
 
@@ -219,9 +218,9 @@ class Main:
 			# select the penultimate => do not add partial word
 			# condition: it must form a complete word (so no "a_[b_c]")
 
-			candidate: str=output.text[splitter_matches[-2].end():splitter_matches[-1].start()]
-			target1: str=output.text[:splitter_matches[-2].end()].rstrip()
-			target2: str=output.text[:splitter_matches[-1].start()].rstrip()
+			candidate: str=full_output.text[splitter_matches[-2].end():splitter_matches[-1].start()]
+			target1: str=full_output.text[:splitter_matches[-2].end()].rstrip()
+			target2: str=full_output.text[:splitter_matches[-1].start()].rstrip()
 
 			#print(f"* {candidate!r} {target1!r} {target2!r}")
 
@@ -279,14 +278,6 @@ class Main:
 						with self._simple_to_word_modification_lock:
 							self._simple_to_word[candidate_simple]=candidate
 							self._save_wordlist()
-						
-						
-
-
-			
-
-
-
 
 
 		# find longest chunk that can be merged (not at all efficient...)
@@ -299,7 +290,7 @@ class Main:
 		if not part: return
 
 		for i in range(0, len(part)-1):
-			part1=part[i:]
+			part1=part[i:] # find longest part1 possible
 			assert len(part1)>=2
 			output=translations_to_output(part1)
 			assert all(
@@ -309,6 +300,13 @@ class Main:
 			simple_form=to_simple(output.text)
 
 			if (
+					full_output.text.endswith(output.text) and
+					output.text and
+					(
+						full_output.text==output.text or
+						re.match(r"\W", full_output.text[-len(output.text)-1])
+						) # that component is not partial (such as _[connection])
+					and
 					simple_form in self._simple_to_word # replace
 					and 
 
