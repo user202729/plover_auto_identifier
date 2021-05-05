@@ -301,13 +301,16 @@ class Main:
 
 			if (
 					full_output.text.endswith(output.text) and
-					output.text and
+					re.fullmatch(r"(\w| )+", output.text)
+					# the user might have a stroke that outputs "+1" which is not no-op,
+					# but "a+1" for example should not be transformed to "a1"
+					and
 					(
 						full_output.text==output.text or
 						re.match(r"\W", full_output.text[-len(output.text)-1])
 						) # that component is not partial (such as _[connection])
 					and
-					simple_form in self._simple_to_word # replace
+					simple_form in self._simple_to_word
 					and 
 
 					# there's no "no-op" translations
