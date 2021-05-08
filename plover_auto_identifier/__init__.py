@@ -128,7 +128,7 @@ class Main:
 			self._save_wordlist()
 
 	def _message_cb(self, message):
-		log.info("Received message:", message)
+		log.info(f"Received message: {message!r}")
 		message_type, message_content=message
 		assert message_type=="file"
 		try:
