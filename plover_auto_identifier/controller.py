@@ -49,7 +49,6 @@ class Controller:
 		conn = self._listen.accept()
 		try:
 			msg = conn.recv()
-			print('==', msg)
 			if msg is None:
 				return True
 			self._message_cb(msg)
@@ -66,13 +65,11 @@ class Controller:
 				log.error('handling client failed', exc_info=True)
 
 	def _send_message(self, msg):
-		print('== send', msg, self._address)
 		conn = connection.Client(self._address, self._family, authkey=self._authkey)
 		try:
 			conn.send(msg)
 		finally:
 			conn.close()
-		print('done')
 
 	def send_command(self, command):
 		self._send_message(('command', command))
