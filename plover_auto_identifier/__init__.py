@@ -24,15 +24,6 @@ if TYPE_CHECKING:
 #stored_wordlist=Path(CONFIG_DIR)/"wordlist.json"
 stored_wordlist=Path(tempfile.gettempdir())/"wordlist.v3.json"
 
-L=print
-#try:
-#	logfile=Path("/tmp/L").open("w", buffering=1)
-#	L=functools.partial(print, file=logfile)
-#	# could use log.debug too but there's no way to turn off Plover's debug
-#except:
-#	pass
-
-
 @functools.lru_cache()
 def to_simple(word: str)->str:
 	return re.sub(r"\W|_", "", word).lower()
@@ -87,7 +78,7 @@ def translations_to_text_or_empty(translations: List[Translation], initial_text:
 		return translations_to_output(translations).text
 	except:
 		import traceback
-		traceback.print_exc()
+		log.info("".join(traceback.format_exc()))
 		return ""
 
 main_instance=cast("Main", None)
@@ -137,7 +128,7 @@ class Main:
 			self._save_wordlist()
 
 	def _message_cb(self, message):
-		L("Received message:", message)
+		log.info("Received message:", message)
 		message_type, message_content=message
 		assert message_type=="file"
 		try:
@@ -222,8 +213,6 @@ class Main:
 			target1: str=full_output.text[:splitter_matches[-2].end()].rstrip()
 			target2: str=full_output.text[:splitter_matches[-1].start()].rstrip()
 
-			#print(f"* {candidate!r} {target1!r} {target2!r}")
-
 			candidate_simple=to_simple(candidate)
 			if self._simple_to_word.get(candidate_simple, None)!=candidate:
 				# condition: There must be a subset of parts that form the candidate
@@ -232,7 +221,6 @@ class Main:
 				b: Optional[int]=None
 				for i in range(1, len(part)): #not empty, not full
 					cur=translations_to_text_or_empty(part[:i]).rstrip()
-					#print(f"{i=} {cur=!r}")
 					if cur==target1 and a is None:
 						a=i #choose the first one (handle the case where there's a upper-next at the beginning)
 					elif cur==target2:
@@ -274,7 +262,7 @@ class Main:
 							# and currently might not be very correct
 							any(effective_no_op(translations_to_text_or_empty([t])) for t in part1)
 							):
-						L(f"Add {candidate!r}")
+						log.info(f"Add {candidate!r}")
 						with self._simple_to_word_modification_lock:
 							self._simple_to_word[candidate_simple]=candidate
 							self._save_wordlist()
@@ -323,19 +311,11 @@ class Main:
 					all(not effective_no_op(translations_to_text_or_empty([t])) for t in part1)
 
 					):
-
-
-				#L(f"Debug: {part1=}")
-				#for i in range(len(part1)+1):
-				#	 L(f"{i} -> {translations_to_output(part1[:i]).text!r}")
-				#L("==")
-
-
 				replaced_word=self._simple_to_word[simple_form]
 				assert "{" not in replaced_word
 				assert "}" not in replaced_word
 
-				L(f"Replace {output.text!r} -> {replaced_word!r}")
+				log.info(f"Replace {output.text!r} -> {replaced_word!r}")
 
 				new_translation=Translation(
 						outline=[Stroke([])],
@@ -422,7 +402,7 @@ class Main:
 			raise Exception("Most recent word is not a word, or is too long")
 
 		word=match[0]
-		print(f"Add {word!r} to wordlist")
+		log.info(f"Add {word!r} to wordlist")
 		with self._simple_to_word_modification_lock:
 			self._simple_to_word[to_simple(word)]=word
 			self._save_wordlist()
