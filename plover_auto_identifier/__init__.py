@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, TYPE_CHECKING, NamedTuple, List, MutableMapping, Sequence, Optional, cast
+from typing import Dict, Tuple, TYPE_CHECKING, NamedTuple, List, MutableMapping, Sequence, Optional, Any, cast
 from collections import defaultdict
 import sys
 import re
@@ -8,6 +8,7 @@ import argparse
 import functools
 import tempfile
 import threading
+import os
 
 from plover.oslayer.config import CONFIG_DIR
 from plover import log
@@ -95,6 +96,8 @@ def create_identifier_mark(word: str, number_last_replace: int, last_content: st
 	assert parse_identifier_mark(result)==(word, number_last_replace, last_content)
 	return result
 
+configuration_file_path: Path=Path(CONFIG_DIR)/"plover_auto_identifier_config.json"
+
 class Main:
 	def __init__(self, engine: "plover.engine.StenoEngine")->None:
 		self._engine=engine
@@ -122,17 +125,22 @@ class Main:
 		self._running: bool=False
 		self._controller: Optional[Controller]=None
 
+		self._config: dict={}
+
 	def _clear_simple_to_word(self)->None:
 		with self._simple_to_word_modification_lock:
 			self._simple_to_word={}
 			self._save_wordlist()
 
-	def _message_cb(self, message):
+	def _message_cb(self, message: Any)->None:
 		log.info(f"Received message: {message!r}")
 		message_type, message_content=message
 		assert message_type=="file"
 		try:
 			filename=Path(message_content)
+			max_size=self._config.get("max_size", -1)
+			if max_size>=0 and os.stat(filename).st_size>=max_size:
+				return
 			with filename.open("r", encoding='u8') as f:
 				content=f.read()
 			with self._simple_to_word_modification_lock:
@@ -340,6 +348,10 @@ class Main:
 		self._controller=Controller(instance="plover_auto_identifier", authkey=None)
 		self._controller.__enter__()
 		self._controller.start(self._message_cb)
+		try:
+			self._config=json.loads(configuration_file_path.read_text(encoding='u8'))
+		except FileNotFoundError:
+			pass
 
 	def stop(self)->None:
 		self._running=False

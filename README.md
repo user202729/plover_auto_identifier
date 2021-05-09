@@ -1,7 +1,7 @@
 # plover-auto-identifier
 You don't have to keep typing `KPA*` or `RUPBD` while programming.
 
-Example usage:
+### Example usage
 
 * Type `THRAEUT R*UPBD STROEBG`, `translate_stroke` is printed.
 * From the next time, typing `THRAEUT STROEBG` will automatically create `translate_stroke`.
@@ -13,7 +13,23 @@ and [PyPI](https://pypi.org/project/plover-auto-identifier/). Report bugs on Git
 Note that this program uses some internal API of Plover, and thus is not guaranteed to work
 on any given Plover versions.
 
-Features:
+### Configuration
+
+Create a file named `plover_auto_identifier_config.json` in Plover's configuration folder
+with the content:
+
+```json
+{
+"max_size": 100000000
+}
+```
+
+Fields:
+
+* `max_size`: the maximum size of a file in bytes that a file can be loaded automatically
+(to read the words from). `-1` means unlimited.
+
+### Features
 
 * Define a dictionary entry mapped to `=auto_identifier_mark` to mark the most recently typed
 word as an identifier
