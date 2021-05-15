@@ -297,14 +297,21 @@ class Main:
 
 			if (
 					full_output.text.endswith(output.text) and
-					re.fullmatch(r"(\w| )+", output.text)
+					# not partial-translation or modifying prefixes(?)/suffixes
+
+					re.fullmatch(r"(\w| )+", output.text) and
 					# the user might have a stroke that outputs "+1" which is not no-op,
 					# but "a+1" for example should not be transformed to "a1"
-					and
+
+					not re.fullmatch(r"\w+", output.text) and
+					# only translate if (old) output consists of multiple words
+					# the most common type of false positive is fingerspelled entries 
+
 					(
 						full_output.text==output.text or
 						re.match(r"\W", full_output.text[-len(output.text)-1])
 						) # that component is not partial (such as _[connection])
+
 					and
 					simple_form in self._simple_to_word
 					and 
