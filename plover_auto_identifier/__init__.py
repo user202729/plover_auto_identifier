@@ -352,8 +352,18 @@ class Main:
 	def start(self)->None:
 		self._running=True
 		self._engine.hook_connect("translated", self.on_translated)
-		self._controller=Controller(instance="plover_auto_identifier", authkey=None)
+		instance=".plover_auto_identifier"
+		self._controller=Controller(instance=instance, authkey=None)
 		self._controller.__enter__()
+
+		if not self._controller.is_owner:
+			log.debug("Force cleanup plover auto identifier socket")
+			if not self._controller.force_cleanup():
+				raise RuntimeError("Another instance?")
+
+			self._controller=Controller(instance=instance, authkey=None)
+			self._controller.__enter__()
+
 		self._controller.start(self._message_cb)
 		try:
 			self._config=json.loads(configuration_file_path.read_text(encoding='u8'))

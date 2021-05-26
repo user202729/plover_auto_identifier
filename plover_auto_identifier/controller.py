@@ -8,12 +8,25 @@ import sys
 import tempfile
 
 from plover import log
+#from plover.oslayer.config import PLATFORM
+
+
+if sys.platform.startswith('darwin'):
+	PLATFORM = 'mac'
+elif sys.platform.startswith('linux'):
+	PLATFORM = 'linux'
+elif sys.platform.startswith('win'):
+	PLATFORM = 'win'
+elif sys.platform.startswith(('freebsd', 'openbsd')):
+	PLATFORM = 'bsd'
+else:
+	PLATFORM = None
 
 
 class Controller:
 
 	def __init__(self, instance='plover', authkey=b'plover'):
-		if sys.platform.startswith('win32'):
+		if PLATFORM == 'win':
 			self._address = r'\\.\pipe' + '\\' + instance
 			self._family = 'AF_PIPE'
 		else:
@@ -28,12 +41,20 @@ class Controller:
 	def is_owner(self):
 		return self._listen is not None
 
+	def force_cleanup(self):
+		assert not self.is_owner
+		if PLATFORM != 'win' and os.path.exists(self._address):
+			os.unlink(self._address)
+			return True
+		return False
+
 	def __enter__(self):
 		assert self._listen is None
 		try:
-			self._listen = connection.Listener(self._address, self._family, authkey=self._authkey)
+			self._listen = connection.Listener(self._address, self._family,
+											   authkey=self._authkey)
 		except Exception as e:
-			if sys.platform.startswith('win32'):
+			if PLATFORM == 'win':
 				if not isinstance(e, PermissionError):
 					raise
 			else:
