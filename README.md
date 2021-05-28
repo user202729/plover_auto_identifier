@@ -57,7 +57,7 @@ from multiprocessing import connection
 filepath=vim.eval('expand("%:p")')
 if filepath: #if the user edit a new buffer, filepath might be empty
 	try:
-		c=connection.Client("/tmp/plover_auto_identifier_socket")
+		c=connection.Client("/tmp/.plover_auto_identifier_socket")
 		try:
 			c.send(("file", filepath))
 		finally:
