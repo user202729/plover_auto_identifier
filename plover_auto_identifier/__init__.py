@@ -289,7 +289,6 @@ class Main:
 			part1=part[i:] # find longest part1 possible
 			assert len(part1)>=2
 			output=translations_to_output(part1)
-			print(output.instructions)
 			assert all(
 					instruction_type!="c" and (
 						instruction_type!="e" or instruction_data.startswith("AUTO_IDENTIFIER_IS_IDENTIFIER_MARK:")
