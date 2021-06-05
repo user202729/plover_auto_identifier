@@ -186,15 +186,15 @@ class Main:
 		# NOTE therefore, currently it's not possible to nest multiple identifiers
 		for i in range(len(part)-1, -1, -1):
 			t=part[i]
-			if (
-					any(f.combo or f.command for f in t.formatting)
-					or not t.english
-					):
+			if (any(
+				f.combo or (f.command and not f.command.startswith("AUTO_IDENTIFIER_IS_IDENTIFIER_MARK:"))
+				for f in t.formatting)
+				or not t.english
+				):
 				part=part[i+1:]
 				break
 			else:
 				assert t.english
-				assert parse_identifier_mark(t.english) is None
 				# (because currently the identifier mark is implemented as a command)
 
 		if not part: return
@@ -289,8 +289,11 @@ class Main:
 			part1=part[i:] # find longest part1 possible
 			assert len(part1)>=2
 			output=translations_to_output(part1)
+			print(output.instructions)
 			assert all(
-					instruction_type not in ("c", "e")
+					instruction_type!="c" and (
+						instruction_type!="e" or instruction_data.startswith("AUTO_IDENTIFIER_IS_IDENTIFIER_MARK:")
+						)
 					for instruction_type, instruction_data in output.instructions)
 
 			simple_form=to_simple(output.text)
@@ -379,8 +382,14 @@ class Main:
 		self._controller=None
 
 	def is_identifier_mark(self, engine: "plover.engine.StenoEngine", argument: str)->None:
-		# this isn't actually processed, just so that latter functions can recognize
-		# the identifiers/combined words converted by this plugin.
+		"""
+		Handler for AUTO_IDENTIFIER_IS_IDENTIFIER_MARK command.
+
+		This isn't actually processed, just so that latter functions can recognize
+		the identifiers/combined words converted by this plugin.
+
+		See also create_identifier_mark and parse_identifier_mark.
+		"""
 		pass
 
 	def remove_identifier(self, translator: Translator, stroke: Stroke, argument: str)->None:
