@@ -10,17 +10,17 @@ import tempfile
 import threading
 import os
 
-from plover.oslayer.config import CONFIG_DIR
-from plover import log
-from plover_build_utils.testing import CaptureOutput
-from plover.translation import Translation, Translator
-from plover.formatting import Formatter
-from plover.steno import Stroke
+from plover.oslayer.config import CONFIG_DIR              # type: ignore
+from plover import log                                    # type: ignore
+from plover_build_utils.testing import CaptureOutput      # type: ignore
+from plover.translation import Translation, Translator    # type: ignore
+from plover.formatting import Formatter                   # type: ignore
+from plover.steno import Stroke                           # type: ignore
 
-from .controller import Controller
+from .controller import Controller                        # type: ignore
 
 if TYPE_CHECKING:
-	import plover.engine
+	import plover.engine                                  # type: ignore
 
 #stored_wordlist=Path(CONFIG_DIR)/"wordlist.json"
 stored_wordlist=Path(tempfile.gettempdir())/"wordlist.v3.json"

@@ -7,7 +7,7 @@ import os
 import sys
 import tempfile
 
-from plover import log
+from plover import log  # type: ignore
 #from plover.oslayer.config import PLATFORM
 
 
