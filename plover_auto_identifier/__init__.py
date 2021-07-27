@@ -150,7 +150,7 @@ class Main:
 						}
 				self._save_wordlist()
 		#except FileNotFoundError, PermissionError, IsADirectoryError:
-		except OSError:
+		except (OSError, UnicodeDecodeError):
 			pass
 
 	def _load_wordlist(self)->None:
