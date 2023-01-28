@@ -121,6 +121,9 @@ class Main:
 		self._running: bool=False
 		self._controller: Optional[Controller]=None
 
+		self._blacklist: set[str]=set()
+		# these words will not be automatically added (it's still allowed to manually add them but there probably isn't much point)
+
 		self._config: dict={}
 
 	def _clear_simple_to_word(self)->None:
@@ -143,6 +146,7 @@ class Main:
 				self._simple_to_word={
 						to_simple(word): word
 						for word in re.findall(r"\w+", content)
+						if to_simple(word) not in self._blacklist
 						}
 				self._save_wordlist()
 		#except FileNotFoundError, PermissionError, IsADirectoryError:
@@ -218,7 +222,7 @@ class Main:
 			target2: str=full_output.text[:splitter_matches[-1].start()].rstrip()
 
 			candidate_simple=to_simple(candidate)
-			if self._simple_to_word.get(candidate_simple, None)!=candidate:
+			if candidate_simple not in self._blacklist and self._simple_to_word.get(candidate_simple, None)!=candidate:
 				# condition: There must be a subset of parts that form the candidate
 
 				a: Optional[int]=None
@@ -372,10 +376,21 @@ class Main:
 		except FileNotFoundError:
 			pass
 
+		self._load_blacklist()
+
+	def _load_blacklist(self)->None:
+		blacklist_files=self._config.get("blacklist", [])
+		self._blacklist=set()
+		if isinstance(blacklist_files, str): blacklist_files=[blacklist_files]
+		assert isinstance(blacklist_files, list)
+		for p in blacklist_files:
+			dict_: dict[str, str] = json.loads((Path(CONFIG_DIR)/p).read_text())
+			self._blacklist |= set(dict_.values())
+
 	def stop(self)->None:
 		global main_instance
 		assert main_instance is self
-		main_instance=None
+		main_instance=None  # type: ignore
 
 		self._running=False
 		self._engine.hook_disconnect("translated", self.on_translated)

@@ -28,6 +28,13 @@ Fields:
 
 * `max_size`: the maximum size of a file in bytes that a file can be loaded automatically
 (to read the words from). `-1` means unlimited.
+* `blacklist`: list of files to be used as dictionaries to be excluded.
+
+	To explain, because of how the feature currently work, if you type something like `Maybe` or `are` then it will be added
+	to the dictionary, which rules out valid separated-words such as `may be` or `a {re^}`. So the blacklist
+	will consist of (Plover-formatted dictionary) files such that words inside it will not be automatically added.
+
+	The path can either be absolute or relative to the configuration directory (e.g. `main.json`)
 
 ### Features
 
