@@ -111,10 +111,6 @@ class Main:
 		except:
 			self._clear_simple_to_word()
 
-		global main_instance
-		assert main_instance is None
-		main_instance=self
-
 		# TODO if there are multiple words with the same simple form, only the most recently typed can be entered
 		#engine.hook_connect("send_string", self.on_send_string)
 		#engine.hook_connect("send_backspaces", self.on_send_backspaces)
@@ -352,6 +348,10 @@ class Main:
 
 
 	def start(self)->None:
+		global main_instance
+		assert main_instance is None
+		main_instance=self
+
 		self._running=True
 		self._engine.hook_connect("translated", self.on_translated)
 		instance=".plover_auto_identifier"
@@ -373,6 +373,10 @@ class Main:
 			pass
 
 	def stop(self)->None:
+		global main_instance
+		assert main_instance is self
+		main_instance=None
+
 		self._running=False
 		self._engine.hook_disconnect("translated", self.on_translated)
 		assert self._controller
