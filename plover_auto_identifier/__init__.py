@@ -384,8 +384,8 @@ class Main:
 		if isinstance(blacklist_files, str): blacklist_files=[blacklist_files]
 		assert isinstance(blacklist_files, list)
 		for p in blacklist_files:
-			dict_: dict[str, str] = json.loads((Path(CONFIG_DIR)/p).read_text())
-			self._blacklist |= set(dict_.values())
+			words: dict[str, str]|list[str] = json.loads((Path(CONFIG_DIR)/p).read_text())
+			self._blacklist |= set(words.values() if isinstance(words, dict) else words)
 
 	def stop(self)->None:
 		global main_instance
